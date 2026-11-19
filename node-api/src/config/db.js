@@ -51,4 +51,19 @@ export async function initializeDatabase() {
       submitted_at DATE NOT NULL DEFAULT CURRENT_DATE
     )
   `)
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS anniversaries (
+      id BIGSERIAL PRIMARY KEY,
+      title VARCHAR(200) NOT NULL,
+      description TEXT NOT NULL,
+      day INTEGER NOT NULL CHECK (day BETWEEN 1 AND 31),
+      month INTEGER NOT NULL CHECK (month BETWEEN 1 AND 12),
+      organization VARCHAR(200) NOT NULL,
+      image TEXT,
+      organizer_email VARCHAR(254) NOT NULL,
+      status VARCHAR(30) NOT NULL DEFAULT 'pending',
+      review_note TEXT,
+      submitted_at DATE NOT NULL DEFAULT CURRENT_DATE
+    )
+  `)
 }

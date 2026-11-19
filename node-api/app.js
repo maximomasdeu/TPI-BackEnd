@@ -1,5 +1,6 @@
 import express from 'express'
 import eventsRoutes from './src/routes/events.routes.js'
+import anniversariesRoutes from './src/routes/anniversaries.routes.js'
 import { healthCheck } from './src/controllers/event.controller.js'
 
 const app = express()
@@ -18,6 +19,7 @@ app.use((request, response, next) => {
 
 app.get('/health', healthCheck)
 app.use('/events', eventsRoutes)
+app.use('/anniversaries', anniversariesRoutes)
 
 app.use((error, request, response, next) => {
   console.error(error)
