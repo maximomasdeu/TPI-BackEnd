@@ -5,7 +5,7 @@ export async function listAnniversaries(request, response, next) {
     const result = await pool.query(
       request.query.status
         ? 'SELECT * FROM anniversaries WHERE status = $1 ORDER BY month, day, submitted_at'
-        : 'SELECT * FROM anniversaries ORDER BY month, day, submitted_at',
+        : "SELECT * FROM anniversaries WHERE status <> 'deleted' ORDER BY month, day, submitted_at",
       request.query.status ? [request.query.status] : []
     )
     response.json(result.rows)
@@ -16,7 +16,7 @@ export async function listAnniversaries(request, response, next) {
 
 export async function getAnniversary(request, response, next) {
   try {
-    const result = await pool.query('SELECT * FROM anniversaries WHERE id = $1', [request.params.id])
+    const result = await pool.query("SELECT * FROM anniversaries WHERE id = $1 AND status <> 'deleted'", [request.params.id])
     if (!result.rows.length) {
       response.status(404).json({ message: 'Efeméride no encontrada' })
       return
@@ -89,6 +89,28 @@ export async function updateAnniversaryStatus(request, response, next) {
 
 export async function deleteAnniversary(request, response, next) {
   try {
+    if (request.user.role === 'admin') {
+      const reason = String(request.body?.reason || '').trim()
+      if (!reason) {
+        response.status(400).json({ message: 'El motivo de eliminación es obligatorio' })
+        return
+      }
+
+      const result = await pool.query(
+        `UPDATE anniversaries
+         SET status = 'deleted', review_note = $1
+         WHERE id = $2 AND status = 'published'
+         RETURNING *`,
+        [reason, request.params.id]
+      )
+      if (!result.rows.length) {
+        response.status(404).json({ message: 'Efeméride no encontrada o no está publicada' })
+        return
+      }
+      response.json(result.rows[0])
+      return
+    }
+
     const result = await pool.query(
       'DELETE FROM anniversaries WHERE id = $1 AND organizer_email = $2 RETURNING id',
       [request.params.id, request.user.email]

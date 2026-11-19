@@ -9,7 +9,7 @@ export async function listEvents(request, response, next) {
     const result = await pool.query(
       request.query.status
         ? 'SELECT * FROM events WHERE status = $1 ORDER BY start_at'
-        : 'SELECT * FROM events ORDER BY start_at',
+        : 'SELECT * FROM events WHERE status <> \'deleted\' ORDER BY start_at',
       request.query.status ? [request.query.status] : []
     )
     response.json(result.rows)
@@ -20,7 +20,7 @@ export async function listEvents(request, response, next) {
 
 export async function getEvent(request, response, next) {
   try {
-    const result = await pool.query('SELECT * FROM events WHERE slug = $1', [request.params.slug])
+    const result = await pool.query("SELECT * FROM events WHERE slug = $1 AND status <> 'deleted'", [request.params.slug])
     if (!result.rows.length) {
       response.status(404).json({ message: 'Evento no encontrado' })
       return
@@ -113,6 +113,28 @@ export async function updateEventStatus(request, response, next) {
 
 export async function deleteEvent(request, response, next) {
   try {
+    if (request.user.role === 'admin') {
+      const reason = String(request.body?.reason || '').trim()
+      if (!reason) {
+        response.status(400).json({ message: 'El motivo de eliminación es obligatorio' })
+        return
+      }
+
+      const result = await pool.query(
+        `UPDATE events
+         SET status = 'deleted', review_note = $1
+         WHERE slug = $2 AND status IN ('published', 'rescheduled')
+         RETURNING *`,
+        [reason, request.params.slug]
+      )
+      if (!result.rows.length) {
+        response.status(404).json({ message: 'Evento no encontrado' })
+        return
+      }
+      response.json(result.rows[0])
+      return
+    }
+
     const result = await pool.query(
       'DELETE FROM events WHERE slug = $1 AND organizer_email = $2 RETURNING slug',
       [request.params.slug, request.user.email]
