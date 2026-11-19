@@ -1,0 +1,128 @@
+import { pool } from '../config/db.js'
+
+export function healthCheck(request, response) {
+  response.json({ ok: true, service: 'node-events-api' })
+}
+
+export async function listEvents(request, response, next) {
+  try {
+    const result = await pool.query(
+      request.query.status
+        ? 'SELECT * FROM events WHERE status = $1 ORDER BY start_at'
+        : 'SELECT * FROM events ORDER BY start_at',
+      request.query.status ? [request.query.status] : []
+    )
+    response.json(result.rows)
+  } catch (error) {
+    next(error)
+  }
+}
+
+export async function getEvent(request, response, next) {
+  try {
+    const result = await pool.query('SELECT * FROM events WHERE slug = $1', [request.params.slug])
+    if (!result.rows.length) {
+      response.status(404).json({ message: 'Evento no encontrado' })
+      return
+    }
+    response.json(result.rows[0])
+  } catch (error) {
+    next(error)
+  }
+}
+
+export async function createEvent(request, response, next) {
+  try {
+    const body = request.body
+    const requiredFields = ['slug', 'title', 'category', 'description', 'start_at', 'end_at', 'location', 'city', 'organization']
+    const missingField = requiredFields.find((field) => !String(body[field] || '').trim())
+    if (missingField) {
+      response.status(400).json({ message: `Falta el campo obligatorio: ${missingField}` })
+      return
+    }
+
+    const result = await pool.query(
+      `INSERT INTO events (
+        slug, title, category, description, image, start_at, end_at,
+        location, city, organization, organizer_email, ticket_type,
+        price, ticket_url, status, submitted_at
+      ) VALUES (
+        $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,'pending',CURRENT_DATE
+      ) RETURNING *`,
+      [
+        body.slug, body.title, body.category, body.description, body.image || null,
+        body.start_at, body.end_at, body.location, body.city, body.organization,
+        request.user.email, body.ticket_type || 'free', body.price || null, body.ticket_url || null,
+      ]
+    )
+    response.status(201).json(result.rows[0])
+  } catch (error) {
+    if (error.code === '23505') {
+      response.status(409).json({ message: 'Ya existe un evento con ese slug' })
+      return
+    }
+    next(error)
+  }
+}
+
+export async function updateEventStatus(request, response, next) {
+  try {
+    const allowedStatuses = ['pending', 'changes_requested', 'published', 'rejected', 'suspended', 'rescheduled', 'cancelled', 'past']
+    const status = request.body.status
+    const isAdmin = request.user.role === 'admin'
+    const organizerStatuses = ['rescheduled', 'cancelled']
+    if (!allowedStatuses.includes(status) || (!isAdmin && !organizerStatuses.includes(status))) {
+      response.status(400).json({ message: 'Estado inválido' })
+      return
+    }
+
+    const result = await pool.query(
+      `UPDATE events
+       SET status = $1,
+           review_note = $2,
+           previous_start_at = CASE
+             WHEN $3::timestamptz IS NOT NULL AND start_at IS DISTINCT FROM $3::timestamptz
+             THEN start_at ELSE previous_start_at END,
+           previous_end_at = CASE
+             WHEN $4::timestamptz IS NOT NULL AND end_at IS DISTINCT FROM $4::timestamptz
+             THEN end_at ELSE previous_end_at END,
+           start_at = COALESCE($3::timestamptz, start_at),
+           end_at = COALESCE($4::timestamptz, end_at)
+       WHERE slug = $5
+         AND ($6 OR organizer_email = $7)
+       RETURNING *`,
+      [
+        status,
+        request.body.review_note || '',
+        request.body.start_at || null,
+        request.body.end_at || null,
+        request.params.slug,
+        isAdmin,
+        request.user.email,
+      ]
+    )
+    if (!result.rows.length) {
+      response.status(404).json({ message: 'Evento no encontrado' })
+      return
+    }
+    response.json(result.rows[0])
+  } catch (error) {
+    next(error)
+  }
+}
+
+export async function deleteEvent(request, response, next) {
+  try {
+    const result = await pool.query(
+      'DELETE FROM events WHERE slug = $1 AND organizer_email = $2 RETURNING slug',
+      [request.params.slug, request.user.email]
+    )
+    if (!result.rows.length) {
+      response.status(404).json({ message: 'Evento no encontrado o sin permiso' })
+      return
+    }
+    response.status(204).send()
+  } catch (error) {
+    next(error)
+  }
+}
