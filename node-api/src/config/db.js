@@ -66,4 +66,15 @@ export async function initializeDatabase() {
       submitted_at DATE NOT NULL DEFAULT CURRENT_DATE
     )
   `)
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS contact_messages (
+      id BIGSERIAL PRIMARY KEY,
+      name VARCHAR(150) NOT NULL,
+      email VARCHAR(254) NOT NULL,
+      subject VARCHAR(200),
+      message TEXT NOT NULL,
+      status VARCHAR(30) NOT NULL DEFAULT 'unread',
+      submitted_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+  `)
 }

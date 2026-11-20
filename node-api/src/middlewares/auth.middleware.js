@@ -20,3 +20,18 @@ export function requireLogin(request, response, next) {
     response.status(401).json({ message: 'Sesión inválida' })
   }
 }
+
+export function optionalLogin(request, response, next) {
+  const authorization = request.headers.authorization
+  if (!authorization?.startsWith('Bearer ')) {
+    next()
+    return
+  }
+
+  try {
+    request.user = jwt.verify(authorization.slice(7), jwtSecret)
+  } catch {
+    // Las rutas públicas siguen funcionando si no hay una sesión válida.
+  }
+  next()
+}

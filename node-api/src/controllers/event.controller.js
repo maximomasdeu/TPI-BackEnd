@@ -6,11 +6,22 @@ export function healthCheck(request, response) {
 
 export async function listEvents(request, response, next) {
   try {
+    const includeDeleted = request.query.include_deleted === 'true'
+    const requestedStatus = request.query.status
+    if (includeDeleted && request.user?.role !== 'admin') {
+      response.status(403).json({ message: 'Solo administración puede consultar eventos eliminados' })
+      return
+    }
+
     const result = await pool.query(
-      request.query.status
+      includeDeleted
+        ? requestedStatus
+          ? 'SELECT * FROM events WHERE status = $1 ORDER BY start_at'
+          : 'SELECT * FROM events ORDER BY start_at'
+        : requestedStatus && !['deleted', 'cancelled'].includes(requestedStatus)
         ? 'SELECT * FROM events WHERE status = $1 ORDER BY start_at'
-        : 'SELECT * FROM events WHERE status <> \'deleted\' ORDER BY start_at',
-      request.query.status ? [request.query.status] : []
+        : "SELECT * FROM events WHERE status NOT IN ('deleted', 'cancelled') ORDER BY start_at",
+      includeDeleted && requestedStatus ? [requestedStatus] : (!includeDeleted && requestedStatus && !['deleted', 'cancelled'].includes(requestedStatus) ? [requestedStatus] : [])
     )
     response.json(result.rows)
   } catch (error) {
@@ -20,7 +31,12 @@ export async function listEvents(request, response, next) {
 
 export async function getEvent(request, response, next) {
   try {
-    const result = await pool.query("SELECT * FROM events WHERE slug = $1 AND status <> 'deleted'", [request.params.slug])
+    const result = await pool.query(
+      request.user?.role === 'admin'
+        ? 'SELECT * FROM events WHERE slug = $1'
+        : "SELECT * FROM events WHERE slug = $1 AND status NOT IN ('deleted', 'cancelled')",
+      [request.params.slug]
+    )
     if (!result.rows.length) {
       response.status(404).json({ message: 'Evento no encontrado' })
       return

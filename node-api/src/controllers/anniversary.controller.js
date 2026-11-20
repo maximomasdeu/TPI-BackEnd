@@ -2,11 +2,22 @@ import { pool } from '../config/db.js'
 
 export async function listAnniversaries(request, response, next) {
   try {
+    const includeDeleted = request.query.include_deleted === 'true'
+    const requestedStatus = request.query.status
+    if (includeDeleted && request.user?.role !== 'admin') {
+      response.status(403).json({ message: 'Solo administración puede consultar efemérides eliminadas' })
+      return
+    }
+
     const result = await pool.query(
-      request.query.status
-        ? 'SELECT * FROM anniversaries WHERE status = $1 ORDER BY month, day, submitted_at'
-        : "SELECT * FROM anniversaries WHERE status <> 'deleted' ORDER BY month, day, submitted_at",
-      request.query.status ? [request.query.status] : []
+      includeDeleted
+        ? requestedStatus
+          ? 'SELECT * FROM anniversaries WHERE status = $1 ORDER BY month, day, submitted_at'
+          : 'SELECT * FROM anniversaries ORDER BY month, day, submitted_at'
+        : requestedStatus && !['deleted', 'cancelled'].includes(requestedStatus)
+          ? 'SELECT * FROM anniversaries WHERE status = $1 ORDER BY month, day, submitted_at'
+          : "SELECT * FROM anniversaries WHERE status NOT IN ('deleted', 'cancelled') ORDER BY month, day, submitted_at",
+      includeDeleted && requestedStatus ? [requestedStatus] : (!includeDeleted && requestedStatus && !['deleted', 'cancelled'].includes(requestedStatus) ? [requestedStatus] : [])
     )
     response.json(result.rows)
   } catch (error) {
@@ -16,7 +27,12 @@ export async function listAnniversaries(request, response, next) {
 
 export async function getAnniversary(request, response, next) {
   try {
-    const result = await pool.query("SELECT * FROM anniversaries WHERE id = $1 AND status <> 'deleted'", [request.params.id])
+    const result = await pool.query(
+      request.user?.role === 'admin'
+        ? 'SELECT * FROM anniversaries WHERE id = $1'
+        : "SELECT * FROM anniversaries WHERE id = $1 AND status NOT IN ('deleted', 'cancelled')",
+      [request.params.id]
+    )
     if (!result.rows.length) {
       response.status(404).json({ message: 'Efeméride no encontrada' })
       return
