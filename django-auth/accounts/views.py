@@ -5,19 +5,32 @@ from datetime import datetime, timedelta, timezone
 import jwt
 from django.contrib.auth import authenticate
 from django.contrib.auth.models import User
+from django.db import transaction
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
+from .models import Favorite, Organization
+
 
 def profile_data(user):
     profile = user.profile
+    organizations = list(
+        profile.organizations.filter(name__isnull=False).values_list('name', flat=True)
+    )
+    if not organizations and profile.organization:
+        organizations = [profile.organization]
+    primary = next(
+        (organization.name for organization in profile.organizations.filter(is_primary=True)),
+        organizations[0] if organizations else '',
+    )
     return {
         'id': user.id,
         'name': profile.name,
         'email': user.email,
         'phone': profile.phone,
-        'organization': profile.organization,
+        'organization': primary,
+        'organizations': organizations,
         'role': profile.role,
     }
 
@@ -37,8 +50,20 @@ def cors_headers(response):
     origin = os.getenv('FRONTEND_ORIGIN', 'http://localhost:5173')
     response['Access-Control-Allow-Origin'] = origin
     response['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
-    response['Access-Control-Allow-Methods'] = 'GET,POST,OPTIONS'
+    response['Access-Control-Allow-Methods'] = 'GET,POST,DELETE,OPTIONS'
     return response
+
+
+def authenticated_user(request):
+    authorization = request.headers.get('Authorization', '')
+    if not authorization.startswith('Bearer '):
+        return None, cors_headers(JsonResponse({'message': 'Se requiere iniciar sesión'}, status=401))
+    try:
+        payload = jwt.decode(authorization[7:], os.getenv('JWT_SECRET', ''), algorithms=['HS256'])
+        user = User.objects.select_related('profile').get(id=payload['sub'])
+        return user, None
+    except Exception:
+        return None, cors_headers(JsonResponse({'message': 'Sesión inválida'}, status=401))
 
 
 @csrf_exempt
@@ -69,10 +94,31 @@ def register(request):
         password=password,
         first_name=name,
     )
-    user.profile.name = name
-    user.profile.phone = str(data.get('phone', '')).strip()
-    user.profile.organization = str(data.get('organization', '')).strip()
-    user.profile.save()
+    raw_organizations = data.get('organizations')
+    if isinstance(raw_organizations, list):
+        organizations = []
+        for raw_name in raw_organizations:
+            organization_name = str(raw_name).strip()
+            if organization_name and organization_name not in organizations:
+                organizations.append(organization_name)
+    else:
+        organization_name = str(data.get('organization', '')).strip()
+        organizations = [organization_name] if organization_name else []
+
+    if not organizations:
+        return cors_headers(JsonResponse({'message': 'Debés indicar al menos una organización'}, status=400))
+
+    with transaction.atomic():
+        user.profile.name = name
+        user.profile.phone = str(data.get('phone', '')).strip()
+        user.profile.organization = organizations[0]
+        user.profile.save()
+        for index, organization_name in enumerate(organizations):
+            Organization.objects.create(
+                profile=user.profile,
+                name=organization_name,
+                is_primary=index == 0,
+            )
 
     token = create_token(user)
     return cors_headers(JsonResponse({'token': token, 'user': profile_data(user)}, status=201))
@@ -115,3 +161,36 @@ def profile(request):
         return cors_headers(JsonResponse({'message': 'Sesión inválida'}, status=401))
 
     return cors_headers(JsonResponse(profile_data(user)))
+
+
+@csrf_exempt
+@require_http_methods(['GET', 'POST', 'DELETE', 'OPTIONS'])
+def favorites(request):
+    if request.method == 'OPTIONS':
+        return cors_headers(JsonResponse({}, status=204))
+
+    user, error = authenticated_user(request)
+    if error:
+        return error
+
+    if request.method == 'GET':
+        slugs = list(user.favorites.values_list('event_slug', flat=True))
+        return cors_headers(JsonResponse({'favorites': slugs}))
+
+    try:
+        data = json.loads(request.body) if request.body else {}
+    except json.JSONDecodeError:
+        return cors_headers(JsonResponse({'message': 'JSON inválido'}, status=400))
+
+    slug = str(data.get('slug', '')).strip()
+    if not slug:
+        return cors_headers(JsonResponse({'message': 'El evento es obligatorio'}, status=400))
+
+    if request.method == 'DELETE':
+        deleted, _ = user.favorites.filter(event_slug=slug).delete()
+        if not deleted:
+            return cors_headers(JsonResponse({'message': 'Favorito no encontrado'}, status=404))
+        return cors_headers(JsonResponse({'slug': slug, 'saved': False}))
+
+    favorite, created = Favorite.objects.get_or_create(user=user, event_slug=slug)
+    return cors_headers(JsonResponse({'slug': favorite.event_slug, 'saved': True}, status=201 if created else 200))
