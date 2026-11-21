@@ -6,7 +6,8 @@ import { healthCheck } from './src/controllers/event.controller.js'
 
 const app = express()
 
-app.use(express.json())
+// 5 MiB originals encoded as base64 need about 6.7 MiB in the JSON request.
+app.use(express.json({ limit: '8mb' }))
 app.use((request, response, next) => {
   response.header('Access-Control-Allow-Origin', process.env.FRONTEND_ORIGIN || 'http://localhost:5173')
   response.header('Access-Control-Allow-Headers', 'Content-Type, Authorization')
@@ -25,7 +26,10 @@ app.use('/contact', contactRoutes)
 
 app.use((error, request, response, next) => {
   console.error(error)
-  response.status(500).json({ message: 'Error interno del servidor' })
+  const statusCode = error.statusCode || error.status || 500
+  response.status(statusCode).json({
+    message: error.statusCode ? error.message : statusCode === 413 ? 'La solicitud supera el tamaño permitido.' : 'Error interno del servidor',
+  })
 })
 
 export default app

@@ -1,4 +1,5 @@
 import { pool } from '../config/db.js'
+import { deleteStoredImage, processAndStoreEventImage } from '../services/event-image.service.js'
 
 export function healthCheck(request, response) {
   response.json({ ok: true, service: 'node-events-api' })
@@ -48,6 +49,7 @@ export async function getEvent(request, response, next) {
 }
 
 export async function createEvent(request, response, next) {
+  let storedImage = null
   try {
     const body = request.body
     const requiredFields = ['slug', 'title', 'category', 'description', 'start_at', 'end_at', 'location', 'city', 'organization']
@@ -56,6 +58,14 @@ export async function createEvent(request, response, next) {
       response.status(400).json({ message: `Falta el campo obligatorio: ${missingField}` })
       return
     }
+
+    const imageSource = body.image_source || (body.image ? { type: 'url', url: body.image } : null)
+    if (body.image_source && body.image) {
+      const error = new Error('Elegí una sola fuente para la imagen del evento.')
+      error.statusCode = 400
+      throw error
+    }
+    storedImage = imageSource ? await processAndStoreEventImage(imageSource, body.slug) : null
 
     const result = await pool.query(
       `INSERT INTO events (
@@ -66,13 +76,14 @@ export async function createEvent(request, response, next) {
         $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,'pending',CURRENT_DATE
       ) RETURNING *`,
       [
-        body.slug, body.title, body.category, body.description, body.image || null,
+        body.slug, body.title, body.category, body.description, storedImage?.url || null,
         body.start_at, body.end_at, body.location, body.city, body.organization,
         request.user.email, body.ticket_type || 'free', body.price || null, body.ticket_url || null,
       ]
     )
     response.status(201).json(result.rows[0])
   } catch (error) {
+    if (storedImage?.path) await deleteStoredImage(storedImage.path).catch(() => {})
     if (error.code === '23505') {
       response.status(409).json({ message: 'Ya existe un evento con ese slug' })
       return
