@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "node --watch --env-file-if-exists=.env server.js",
-    "start": "node --env-file-if-exists=.env server.js"
+    "start": "node --env-file-if-exists=.env server.js",
+    "seed:anniversaries": "node --env-file-if-exists=.env scripts/seed-anniversaries.js"
   },
   "dependencies": {
     "express": "^5.1.0",
