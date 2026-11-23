@@ -1,5 +1,23 @@
 import { pool } from '../config/db.js'
 
+export async function listContactMessages(request, response, next) {
+  try {
+    if (request.user?.role !== 'admin') {
+      response.status(403).json({ message: 'Solo administración puede ver las consultas' })
+      return
+    }
+
+    const result = await pool.query(
+      `SELECT id, name, email, subject, message, submitted_at
+       FROM contact_messages
+       ORDER BY submitted_at DESC, id DESC`
+    )
+    response.json(result.rows)
+  } catch (error) {
+    next(error)
+  }
+}
+
 export async function createContactMessage(request, response, next) {
   try {
     const name = String(request.body.name || '').trim()
@@ -7,8 +25,8 @@ export async function createContactMessage(request, response, next) {
     const subject = String(request.body.subject || '').trim()
     const message = String(request.body.message || '').trim()
 
-    if (!name || !email || !message) {
-      response.status(400).json({ message: 'Nombre, correo y mensaje son obligatorios' })
+    if (!name || !email || !subject || !message) {
+      response.status(400).json({ message: 'Nombre, correo, asunto y mensaje son obligatorios' })
       return
     }
     if (!/^\S+@\S+\.\S+$/.test(email)) {
@@ -20,7 +38,7 @@ export async function createContactMessage(request, response, next) {
       `INSERT INTO contact_messages (name, email, subject, message)
        VALUES ($1, $2, $3, $4)
        RETURNING id, submitted_at`,
-      [name, email, subject || null, message]
+      [name, email, subject, message]
     )
     response.status(201).json({ message: 'Mensaje enviado correctamente', ...result.rows[0] })
   } catch (error) {

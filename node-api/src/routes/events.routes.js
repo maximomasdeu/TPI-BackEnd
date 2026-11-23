@@ -4,6 +4,7 @@ import {
   deleteEvent,
   getEvent,
   listEvents,
+  updateEventDetails,
   updateEventStatus,
 } from '../controllers/event.controller.js'
 import { optionalLogin, requireLogin } from '../middlewares/auth.middleware.js'
@@ -14,6 +15,7 @@ router.get('/', optionalLogin, listEvents)
 router.get('/:slug', optionalLogin, getEvent)
 router.post('/', requireLogin, createEvent)
 router.patch('/:slug/status', requireLogin, updateEventStatus)
+router.patch('/:slug', requireLogin, updateEventDetails)
 router.delete('/:slug', requireLogin, deleteEvent)
 
 export default router

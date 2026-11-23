@@ -92,6 +92,82 @@ export async function createEvent(request, response, next) {
   }
 }
 
+export async function updateEventDetails(request, response, next) {
+  let storedImage = null
+  try {
+    if (request.user.role !== 'organizer') {
+      response.status(403).json({ message: 'Solo un organizador puede modificar su propuesta' })
+      return
+    }
+
+    const body = request.body
+    const requiredFields = ['title', 'category', 'description', 'start_at', 'end_at', 'location', 'city', 'organization']
+    const missingField = requiredFields.find((field) => !String(body[field] || '').trim())
+    if (missingField) {
+      response.status(400).json({ message: `Falta el campo obligatorio: ${missingField}` })
+      return
+    }
+
+    const current = await pool.query(
+      `SELECT * FROM events
+       WHERE slug = $1 AND organizer_email = $2`,
+      [request.params.slug, request.user.email]
+    )
+    if (!current.rows.length) {
+      response.status(404).json({ message: 'Evento no encontrado o sin permiso' })
+      return
+    }
+    if (current.rows[0].status !== 'changes_requested') {
+      response.status(400).json({ message: 'Solo se pueden modificar eventos con cambios solicitados' })
+      return
+    }
+
+    if (body.image_source) {
+      storedImage = await processAndStoreEventImage(body.image_source, request.params.slug)
+    }
+
+    const result = await pool.query(
+      `UPDATE events
+       SET title = $1,
+           category = $2,
+           description = $3,
+           image = COALESCE($4, image),
+           start_at = $5,
+           end_at = $6,
+           location = $7,
+           city = $8,
+           organization = $9,
+           ticket_type = $10,
+           price = $11,
+           ticket_url = $12,
+           status = 'pending',
+           review_note = ''
+       WHERE slug = $13 AND organizer_email = $14
+       RETURNING *`,
+      [
+        body.title,
+        body.category,
+        body.description,
+        storedImage?.url || null,
+        body.start_at,
+        body.end_at,
+        body.location,
+        body.city,
+        body.organization,
+        body.ticket_type || 'free',
+        body.price || null,
+        body.ticket_url || null,
+        request.params.slug,
+        request.user.email,
+      ]
+    )
+    response.json(result.rows[0])
+  } catch (error) {
+    if (storedImage?.path) await deleteStoredImage(storedImage.path).catch(() => {})
+    next(error)
+  }
+}
+
 export async function updateEventStatus(request, response, next) {
   try {
     const allowedStatuses = ['pending', 'changes_requested', 'published', 'rejected', 'suspended', 'rescheduled', 'cancelled', 'past']
