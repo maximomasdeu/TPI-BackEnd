@@ -1,4 +1,5 @@
 import { pool } from '../config/db.js'
+import { deleteStoredImage, processAndStoreEventImage } from '../services/event-image.service.js'
 
 export async function listAnniversaries(request, response, next) {
   try {
@@ -44,6 +45,7 @@ export async function getAnniversary(request, response, next) {
 }
 
 export async function createAnniversary(request, response, next) {
+  let storedImage = null
   try {
     const body = request.body
     const requiredFields = ['title', 'description', 'day', 'month', 'organization']
@@ -60,6 +62,16 @@ export async function createAnniversary(request, response, next) {
       return
     }
 
+    if (body.image_source && body.image) {
+      const error = new Error('Elegí una sola fuente para la imagen de la efeméride.')
+      error.statusCode = 400
+      throw error
+    }
+    if (body.image_source) {
+      const imageSlug = `efemeride-${month}-${day}-${body.title}`
+      storedImage = await processAndStoreEventImage(body.image_source, imageSlug)
+    }
+
     const result = await pool.query(
       `INSERT INTO anniversaries (
         title, description, day, month, organization, image,
@@ -68,11 +80,12 @@ export async function createAnniversary(request, response, next) {
       RETURNING *`,
       [
         body.title, body.description, day, month, body.organization,
-        body.image || null, request.user.email,
+        storedImage?.url || body.image || null, request.user.email,
       ]
     )
     response.status(201).json(result.rows[0])
   } catch (error) {
+    if (storedImage?.path) await deleteStoredImage(storedImage.path).catch(() => {})
     next(error)
   }
 }
