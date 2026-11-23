@@ -1,0 +1,14 @@
+#!/bin/sh
+set -eu
+
+repo_root=$(git rev-parse --show-toplevel)
+cd "$repo_root/node-api"
+
+if command -v npm >/dev/null 2>&1; then
+  npm test
+elif command -v npm.cmd >/dev/null 2>&1; then
+  npm.cmd test
+else
+  echo "No se encontró npm. Instalá Node.js y agregá npm al PATH." >&2
+  exit 1
+fi
