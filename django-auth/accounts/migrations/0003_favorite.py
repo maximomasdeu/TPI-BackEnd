@@ -4,12 +4,14 @@ import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
+    # Añade favoritos asociados al usuario y referenciados por slug de evento.
     dependencies = [
         ('accounts', '0002_organization'),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 
     operations = [
+        # Crea la tabla y evita guardar dos veces el mismo favorito del usuario.
         migrations.CreateModel(
             name='Favorite',
             fields=[

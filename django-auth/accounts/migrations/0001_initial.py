@@ -4,6 +4,7 @@ import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
+    # Primera migración de accounts: crea el perfil vinculado al usuario de Django.
     initial = True
 
     dependencies = [
@@ -11,6 +12,7 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
+        # El usuario se mantiene en el modelo de autenticación de Django.
         migrations.CreateModel(
             name='Profile',
             fields=[

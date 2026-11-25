@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { admin, auth, organizer, request, withApi } from './helpers.js'
 
+// Casos de API para lectura, creación, edición, moderación y eliminación de eventos.
 const event = {
   slug: 'evento-prueba',
   title: 'Evento de prueba',

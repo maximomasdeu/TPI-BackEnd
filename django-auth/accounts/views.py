@@ -13,6 +13,7 @@ from django.views.decorators.http import require_http_methods
 from .models import Favorite, Organization
 
 
+# Prepara los datos del perfil con el mismo formato para las respuestas de la API.
 def profile_data(user):
     profile = user.profile
     organizations = list(
@@ -35,6 +36,7 @@ def profile_data(user):
     }
 
 
+# Genera un JWT válido durante ocho horas; el frontend lo envía en el encabezado Authorization.
 def create_token(user):
     profile = user.profile
     payload = {
@@ -46,6 +48,7 @@ def create_token(user):
     return jwt.encode(payload, os.getenv('JWT_SECRET', ''), algorithm='HS256')
 
 
+# Agrega a la respuesta los encabezados CORS permitidos para el frontend.
 def cors_headers(response):
     origin = os.getenv('FRONTEND_ORIGIN', 'http://localhost:5173')
     response['Access-Control-Allow-Origin'] = origin
@@ -54,6 +57,7 @@ def cors_headers(response):
     return response
 
 
+# Valida el Bearer token y recupera el usuario asociado.
 def authenticated_user(request):
     authorization = request.headers.get('Authorization', '')
     if not authorization.startswith('Bearer '):
@@ -66,6 +70,7 @@ def authenticated_user(request):
         return None, cors_headers(JsonResponse({'message': 'Sesión inválida'}, status=401))
 
 
+# Registra un usuario y guarda en su perfil los datos adicionales de la aplicación.
 @csrf_exempt
 @require_http_methods(['POST', 'OPTIONS'])
 def register(request):
@@ -94,6 +99,8 @@ def register(request):
         password=password,
         first_name=name,
     )
+
+    # Acepta varias organizaciones; si no se envía la lista, admite el campo singular.
     raw_organizations = data.get('organizations')
     if isinstance(raw_organizations, list):
         organizations = []
@@ -105,9 +112,11 @@ def register(request):
         organization_name = str(data.get('organization', '')).strip()
         organizations = [organization_name] if organization_name else []
 
+    # La organización inicial también queda marcada como principal en el perfil.
     if not organizations:
         return cors_headers(JsonResponse({'message': 'Debés indicar al menos una organización'}, status=400))
 
+    # Agrupa las escrituras del perfil y sus organizaciones en una transacción.
     with transaction.atomic():
         user.profile.name = name
         user.profile.phone = str(data.get('phone', '')).strip()
@@ -124,6 +133,7 @@ def register(request):
     return cors_headers(JsonResponse({'token': token, 'user': profile_data(user)}, status=201))
 
 
+# Comprueba las credenciales de Django y, si son válidas, entrega un token y el perfil.
 @csrf_exempt
 @require_http_methods(['POST', 'OPTIONS'])
 def login(request):
@@ -145,6 +155,7 @@ def login(request):
     return cors_headers(JsonResponse({'token': create_token(user), 'user': profile_data(user)}))
 
 
+# Devuelve el perfil después de verificar el JWT recibido en Authorization.
 @require_http_methods(['GET', 'OPTIONS'])
 def profile(request):
     if request.method == 'OPTIONS':
@@ -163,6 +174,7 @@ def profile(request):
     return cors_headers(JsonResponse(profile_data(user)))
 
 
+# Gestiona favoritos del usuario mediante el slug del evento, no el evento completo.
 @csrf_exempt
 @require_http_methods(['GET', 'POST', 'DELETE', 'OPTIONS'])
 def favorites(request):
@@ -173,6 +185,7 @@ def favorites(request):
     if error:
         return error
 
+    # GET solo consulta los slugs guardados por este usuario.
     if request.method == 'GET':
         slugs = list(user.favorites.values_list('event_slug', flat=True))
         return cors_headers(JsonResponse({'favorites': slugs}))
@@ -186,6 +199,7 @@ def favorites(request):
     if not slug:
         return cors_headers(JsonResponse({'message': 'El evento es obligatorio'}, status=400))
 
+    # DELETE quita el favorito; POST lo crea si todavía no existe.
     if request.method == 'DELETE':
         deleted, _ = user.favorites.filter(event_slug=slug).delete()
         if not deleted:

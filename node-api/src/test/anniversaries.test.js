@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { admin, auth, organizer, request, withApi } from './helpers.js'
 
+// Casos de API para lectura, creación, moderación y eliminación de efemérides.
 const anniversary = {
   id: 7,
   title: 'Aniversario de prueba',

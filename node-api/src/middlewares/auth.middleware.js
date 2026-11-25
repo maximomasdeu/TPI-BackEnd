@@ -6,6 +6,7 @@ if (!jwtSecret) {
   throw new Error('JWT_SECRET is required')
 }
 
+// Exige un Bearer token válido y adjunta sus datos decodificados al request.
 export function requireLogin(request, response, next) {
   const authorization = request.headers.authorization
   if (!authorization?.startsWith('Bearer ')) {
@@ -21,6 +22,7 @@ export function requireLogin(request, response, next) {
   }
 }
 
+// Permite continuar sin sesión; si el token es válido, agrega el usuario al request.
 export function optionalLogin(request, response, next) {
   const authorization = request.headers.authorization
   if (!authorization?.startsWith('Bearer ')) {

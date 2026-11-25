@@ -1,6 +1,9 @@
 import { pool } from '../src/config/db.js'
 
+// Imagen compartida por los eventos de ejemplo cargados en desarrollo.
 const image = 'https://images.unsplash.com/photo-1506157786151-b8491531f063?auto=format&fit=crop&w=1200&q=80'
+
+// Datos iniciales; el slug identifica cada evento y evita duplicarlo al ejecutar otra vez.
 const events = [
   ['feria-artesanal-costanera', 'Feria artesanal de la costanera', 'Cultura', 'Artesanos y emprendedores de Goya se reúnen junto al río con piezas únicas, demostraciones en vivo y propuestas para toda la familia.', '2026-12-05T17:00:00-03:00', '2026-12-05T22:00:00-03:00', 'Paseo Costero', 'Goya, Corrientes', 'Colectivo de Artesanos de Goya', 'published'],
   ['festival-del-chamame-goyano', 'Festival del chamamé goyano', 'Música', 'Una noche de música litoraleña con conjuntos locales, baile y un patio gastronómico dedicado a los sabores correntinos.', '2026-12-12T20:00:00-03:00', '2026-12-13T01:00:00-03:00', 'Anfiteatro Municipal', 'Goya, Corrientes', 'Cultura Goya', 'published'],
@@ -29,6 +32,7 @@ const events = [
   ['encuentro-poesia-ribera', 'Encuentro de poesía de la ribera', 'Cultura', 'Lectura abierta de poemas, micrófono para autores locales y música en vivo en un encuentro dedicado a las voces del litoral.', '2027-05-22T18:00:00-03:00', '2027-05-22T21:00:00-03:00', 'Centro Cultural del Puerto', 'Goya, Corrientes', 'Palabras del Paraná', 'published'],
 ]
 
+// Inserta eventos de ejemplo sin sobrescribir registros que ya existan.
 async function seedEvents() {
   let inserted = 0
   for (const [slug, title, category, description, startAt, endAt, location, city, organization, status] of events) {

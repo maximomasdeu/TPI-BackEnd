@@ -1,10 +1,12 @@
 import { pool } from '../config/db.js'
 import { deleteStoredImage, processAndStoreEventImage } from '../services/event-image.service.js'
 
+// Responde al chequeo de disponibilidad sin consultar la base de datos.
 export function healthCheck(request, response) {
   response.json({ ok: true, service: 'node-events-api' })
 }
 
+// Lista eventos ordenados por fecha y aplica filtros de estado y visibilidad.
 export async function listEvents(request, response, next) {
   try {
     const includeDeleted = request.query.include_deleted === 'true'
@@ -30,6 +32,7 @@ export async function listEvents(request, response, next) {
   }
 }
 
+// Busca un evento por slug; los eliminados o cancelados solo son visibles para admin.
 export async function getEvent(request, response, next) {
   try {
     const result = await pool.query(
@@ -48,6 +51,7 @@ export async function getEvent(request, response, next) {
   }
 }
 
+// Valida y crea una propuesta de evento, guardando su imagen si fue enviada.
 export async function createEvent(request, response, next) {
   let storedImage = null
   try {
@@ -92,6 +96,7 @@ export async function createEvent(request, response, next) {
   }
 }
 
+// Permite al organizador dueño corregir una propuesta que recibió pedido de cambios.
 export async function updateEventDetails(request, response, next) {
   let storedImage = null
   try {
@@ -168,6 +173,7 @@ export async function updateEventDetails(request, response, next) {
   }
 }
 
+// Cambia el estado del evento y, si corresponde, registra sus fechas anteriores.
 export async function updateEventStatus(request, response, next) {
   try {
     const allowedStatuses = ['pending', 'changes_requested', 'published', 'rejected', 'suspended', 'rescheduled', 'cancelled', 'past']
@@ -214,6 +220,7 @@ export async function updateEventStatus(request, response, next) {
   }
 }
 
+// El organizador elimina su propuesta; admin realiza una baja lógica con motivo.
 export async function deleteEvent(request, response, next) {
   try {
     if (request.user.role === 'admin') {

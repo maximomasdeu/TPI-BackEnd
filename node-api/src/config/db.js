@@ -4,10 +4,12 @@ import pg from 'pg'
 
 const { Pool } = pg
 
+// Evita iniciar la API sin una conexión explícita a PostgreSQL.
 if (!process.env.DATABASE_URL) {
   throw new Error('DATABASE_URL is required')
 }
 
+// Arma la configuración SSL y carga el certificado de la CA cuando se requiere.
 function getSslConfig() {
   if (process.env.DB_SSLMODE !== 'require') return false
 
@@ -26,7 +28,9 @@ export const pool = new Pool({
   ssl: getSslConfig(),
 })
 
+// Crea las tablas necesarias si todavía no existen.
 export async function initializeDatabase() {
+  // Eventos publicados o propuestos por los organizadores.
   await pool.query(`
     CREATE TABLE IF NOT EXISTS events (
       id BIGSERIAL PRIMARY KEY,
@@ -51,6 +55,7 @@ export async function initializeDatabase() {
       submitted_at DATE NOT NULL DEFAULT CURRENT_DATE
     )
   `)
+  // Efemérides con una fecha anual expresada por día y mes.
   await pool.query(`
     CREATE TABLE IF NOT EXISTS anniversaries (
       id BIGSERIAL PRIMARY KEY,
@@ -66,6 +71,7 @@ export async function initializeDatabase() {
       submitted_at DATE NOT NULL DEFAULT CURRENT_DATE
     )
   `)
+  // Mensajes enviados desde el formulario de contacto.
   await pool.query(`
     CREATE TABLE IF NOT EXISTS contact_messages (
       id BIGSERIAL PRIMARY KEY,

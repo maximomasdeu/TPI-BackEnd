@@ -6,8 +6,8 @@ import { healthCheck } from './src/controllers/event.controller.js'
 
 const app = express()
 
-// 5 MiB originals encoded as base64 need about 6.7 MiB in the JSON request.
 app.use(express.json({ limit: '8mb' }))
+// Habilita las solicitudes del frontend y responde directamente a los preflight CORS.
 app.use((request, response, next) => {
   response.header('Access-Control-Allow-Origin', process.env.FRONTEND_ORIGIN || 'http://localhost:5173')
   response.header('Access-Control-Allow-Headers', 'Content-Type, Authorization')
@@ -19,11 +19,15 @@ app.use((request, response, next) => {
   next()
 })
 
+// Endpoint simple para comprobar que el servicio está disponible.
 app.get('/health', healthCheck)
+
+// Cada grupo de rutas delega la lógica de negocio en sus controladores.
 app.use('/events', eventsRoutes)
 app.use('/anniversaries', anniversariesRoutes)
 app.use('/contact', contactRoutes)
 
+// Convierte errores no manejados por una ruta en respuestas JSON.
 app.use((error, request, response, next) => {
   console.error(error)
   const statusCode = error.statusCode || error.status || 500

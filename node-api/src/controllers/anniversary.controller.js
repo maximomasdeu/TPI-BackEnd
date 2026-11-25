@@ -1,6 +1,7 @@
 import { pool } from '../config/db.js'
 import { deleteStoredImage, processAndStoreEventImage } from '../services/event-image.service.js'
 
+// Lista efemérides por fecha y aplica filtros de estado y permisos de administración.
 export async function listAnniversaries(request, response, next) {
   try {
     const includeDeleted = request.query.include_deleted === 'true'
@@ -26,6 +27,7 @@ export async function listAnniversaries(request, response, next) {
   }
 }
 
+// Busca una efeméride por ID, ocultando las eliminadas al público.
 export async function getAnniversary(request, response, next) {
   try {
     const result = await pool.query(
@@ -44,6 +46,7 @@ export async function getAnniversary(request, response, next) {
   }
 }
 
+// Valida y crea una propuesta de efeméride, incluyendo su imagen opcional.
 export async function createAnniversary(request, response, next) {
   let storedImage = null
   try {
@@ -90,6 +93,7 @@ export async function createAnniversary(request, response, next) {
   }
 }
 
+// Cambia el estado de una efeméride; la operación está reservada a administración.
 export async function updateAnniversaryStatus(request, response, next) {
   try {
     const allowedStatuses = ['pending', 'changes_requested', 'published', 'rejected']
@@ -116,6 +120,7 @@ export async function updateAnniversaryStatus(request, response, next) {
   }
 }
 
+// El organizador elimina su propuesta; admin da de baja una publicada con motivo.
 export async function deleteAnniversary(request, response, next) {
   try {
     if (request.user.role === 'admin') {

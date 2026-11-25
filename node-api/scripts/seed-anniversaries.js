@@ -1,6 +1,7 @@
 ﻿import { pool } from '../src/config/db.js'
 import { upcomingAnniversaries } from '../../../TPIFINAL/src/data/upcomingAnniversaries.js'
 
+// Identifica las efemérides administradas por este seed.
 const organizerEmail = 'contenido@agenda-ciudad.local'
 let inserted = 0
 let updated = 0
@@ -9,6 +10,7 @@ let skipped = 0
 try {
   for (const { title, description, day, month, organization, image } of upcomingAnniversaries) {
     const values = [title, description, day, month, organization, image, organizerEmail]
+    // Actualiza primero la efeméride existente que pertenece a este seed.
     const existing = await pool.query(
       `UPDATE anniversaries
       SET title = $1, description = $2, organization = $5, image = $6, status = 'published'
@@ -22,6 +24,7 @@ try {
       continue
     }
 
+    // Si no es propia, inserta solo cuando no exista otra efeméride activa para esa fecha.
     const created = await pool.query(
       `INSERT INTO anniversaries (
         title, description, day, month, organization, image,

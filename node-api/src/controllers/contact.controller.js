@@ -1,5 +1,6 @@
 import { pool } from '../config/db.js'
 
+// Devuelve los mensajes de contacto ordenados de más recientes a más antiguos.
 export async function listContactMessages(request, response, next) {
   try {
     if (request.user?.role !== 'admin') {
@@ -18,6 +19,7 @@ export async function listContactMessages(request, response, next) {
   }
 }
 
+// Valida y guarda un mensaje enviado desde el formulario público de contacto.
 export async function createContactMessage(request, response, next) {
   try {
     const name = String(request.body.name || '').trim()

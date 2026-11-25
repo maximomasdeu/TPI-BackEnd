@@ -9,12 +9,14 @@ const MAX_PIXELS = 40_000_000
 const ACCEPTED_FORMATS = new Set(['jpeg', 'png', 'webp', 'avif'])
 const ACCEPTED_CONTENT_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/avif'])
 
+// Crea errores con un código HTTP para que el middleware central responda adecuadamente.
 function fail(statusCode, message) {
   const error = new Error(message)
   error.statusCode = statusCode
   return error
 }
 
+// Determina si una IP es pública; rechaza direcciones locales o reservadas.
 function isPublicAddress(address) {
   const version = isIP(address)
   if (version === 4) {
@@ -38,6 +40,7 @@ function isPublicAddress(address) {
   return false
 }
 
+// Resuelve el host y rechaza el enlace si alguna dirección no es pública.
 async function resolvePublicHost(hostname) {
   const version = isIP(hostname)
   let addresses
@@ -52,6 +55,7 @@ async function resolvePublicHost(hostname) {
   return addresses[0]
 }
 
+// Acepta solo enlaces HTTPS sin credenciales ni puertos alternativos.
 function validateImageUrl(value) {
   let url
   try {
@@ -65,6 +69,7 @@ function validateImageUrl(value) {
   return url
 }
 
+// Descarga una imagen verificando redirecciones, tipo de contenido y tamaño.
 function requestImage(url, address) {
   return new Promise((resolve, reject) => {
     const request = https.request(url, {
@@ -124,6 +129,7 @@ function requestImage(url, address) {
   })
 }
 
+// Sigue hasta tres redirecciones y vuelve a validar cada destino antes de descargarlo.
 async function downloadImage(value) {
   let url = validateImageUrl(value)
   for (let redirects = 0; redirects <= 3; redirects += 1) {
@@ -136,6 +142,7 @@ async function downloadImage(value) {
   throw fail(400, 'No se pudo descargar la imagen del enlace.')
 }
 
+// Convierte una fuente URL o archivo base64 en un buffer después de validarla.
 function imageBufferFromSource(source) {
   if (source?.type === 'url') {
     if (typeof source.url !== 'string' || !source.url.trim()) throw fail(400, 'Falta el enlace de la imagen.')
@@ -153,6 +160,7 @@ function imageBufferFromSource(source) {
   throw fail(400, 'La fuente de imagen no es válida.')
 }
 
+// Comprueba la imagen, corrige su orientación, ajusta sus dimensiones y la convierte a WebP.
 async function toWebp(input) {
   let metadata
   try {
@@ -176,6 +184,7 @@ async function toWebp(input) {
   throw fail(413, 'La imagen optimizada todavía supera el límite de 5 MB.')
 }
 
+// Lee la configuración necesaria para subir archivos al bucket de Supabase Storage.
 function getStorageConfig() {
   const supabaseUrl = process.env.SUPABASE_URL
   const secretKey = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -186,6 +195,7 @@ function getStorageConfig() {
   return { supabaseUrl: supabaseUrl.replace(/\/$/, ''), secretKey, bucket }
 }
 
+// Prepara los encabezados de autenticación y tipo de contenido para Storage.
 function storageHeaders(secretKey, contentType) {
   const headers = { apikey: secretKey }
   // New sb_secret keys are opaque API keys, not JWTs. A Bearer header would
@@ -195,6 +205,7 @@ function storageHeaders(secretKey, contentType) {
   return headers
 }
 
+// Valida, optimiza y sube la imagen; devuelve su ruta interna y su URL pública.
 export async function processAndStoreEventImage(source, slug) {
   const input = await imageBufferFromSource(source)
   const webp = await toWebp(input)
@@ -218,6 +229,7 @@ export async function processAndStoreEventImage(source, slug) {
   }
 }
 
+// Elimina de Storage una imagen cuya carga ya no se necesita.
 export async function deleteStoredImage(path) {
   const { supabaseUrl, secretKey, bucket } = getStorageConfig()
   const url = `${supabaseUrl}/storage/v1/object/${encodeURIComponent(bucket)}/${path.split('/').map(encodeURIComponent).join('/')}`

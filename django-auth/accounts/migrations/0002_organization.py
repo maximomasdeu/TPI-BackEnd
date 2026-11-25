@@ -2,7 +2,9 @@ from django.db import migrations, models
 import django.db.models.deletion
 
 
+# Copia a la nueva tabla las organizaciones que antes vivían en Profile.
 def copy_existing_organizations(apps, schema_editor):
+    # Usa los modelos históricos de esta migración para conservar compatibilidad.
     Profile = apps.get_model('accounts', 'Profile')
     Organization = apps.get_model('accounts', 'Organization')
     for profile in Profile.objects.all().iterator():
@@ -16,11 +18,13 @@ def copy_existing_organizations(apps, schema_editor):
 
 
 class Migration(migrations.Migration):
+    # Añade organizaciones múltiples y migra los datos ya existentes.
     dependencies = [
         ('accounts', '0001_initial'),
     ]
 
     operations = [
+        # Crea la tabla y garantiza un solo registro por perfil y nombre.
         migrations.CreateModel(
             name='Organization',
             fields=[
