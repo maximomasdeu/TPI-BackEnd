@@ -18,23 +18,23 @@ const event = {
 
 test('GET /events lista eventos visibles y admite filtro de estado', async () => {
   await withApi(async (sql, values) => {
-    assert.match(sql, /FROM events WHERE status = \$1/)
-    assert.deepEqual(values, ['published'])
-    return { rows: [event] }
+    assert.match(sql, /FROM events WHERE status = ANY\(\$1::text\[\]\) AND status = \$2/)
+    assert.deepEqual(values, [['published', 'suspended', 'rescheduled', 'past'], 'published'])
+    return { rows: [{ ...event, status: 'published' }] }
   }, async (url) => {
     const result = await request(url, '/events?status=published')
     assert.equal(result.status, 200)
-    assert.deepEqual(result.body, [event])
+    assert.deepEqual(result.body, [{ ...event, status: 'published' }])
   })
 })
 
 test('GET /events/:slug obtiene por slug y responde 404 si no existe', async () => {
   await withApi(async (sql, values) => {
     assert.match(sql, /WHERE slug = \$1/)
-    assert.deepEqual(values, ['evento-prueba'])
+    assert.deepEqual(values, ['evento-prueba', ['published', 'suspended', 'rescheduled', 'past'], organizer.email])
     return { rows: [event] }
   }, async (url) => {
-    const result = await request(url, '/events/evento-prueba')
+    const result = await request(url, '/events/evento-prueba', { headers: auth() })
     assert.equal(result.status, 200)
     assert.deepEqual(result.body, event)
   })
@@ -75,25 +75,30 @@ test('POST /events crea un evento, exige autenticacion y valida datos y slug dup
   })
 })
 
-test('PATCH /events/:slug modifica una propuesta con cambios solicitados', async () => {
-  let calls = 0
-  await withApi(async (sql, values) => {
-    calls += 1
-    if (calls === 1) {
-      assert.match(sql, /SELECT \* FROM events/)
-      assert.deepEqual(values, ['evento-prueba', organizer.email])
-      return { rows: [{ ...event, status: 'changes_requested' }] }
-    }
-    assert.match(sql, /UPDATE events/)
-    assert.equal(values[0], event.title)
-    return { rows: [{ ...event, status: 'pending' }] }
-  }, async (url) => {
-    const result = await request(url, '/events/evento-prueba', { method: 'PATCH', body: event, headers: auth() })
-    assert.equal(result.status, 200)
-    assert.equal(result.body.status, 'pending')
-    assert.equal(calls, 2)
+for (const initialStatus of ['changes_requested', 'pending', 'published', 'rescheduled']) {
+  test(`PATCH /events/:slug envía un evento ${initialStatus} a revisión`, async () => {
+    let calls = 0
+    await withApi(async (sql, values) => {
+      calls += 1
+      if (calls === 1) {
+        assert.match(sql, /SELECT \* FROM events/)
+        assert.deepEqual(values, ['evento-prueba', organizer.email])
+        return { rows: [{ ...event, status: initialStatus }] }
+      }
+      assert.match(sql, /UPDATE events/)
+      assert.match(sql, /status = 'pending'/)
+      assert.match(sql, /WHERE slug = \$13 AND organizer_email = \$14 AND status = \$15/)
+      assert.equal(values[0], event.title)
+      assert.deepEqual(values.slice(-3), ['evento-prueba', organizer.email, initialStatus])
+      return { rows: [{ ...event, status: 'pending' }] }
+    }, async (url) => {
+      const result = await request(url, '/events/evento-prueba', { method: 'PATCH', body: event, headers: auth() })
+      assert.equal(result.status, 200)
+      assert.equal(result.body.status, 'pending')
+      assert.equal(calls, 2)
+    })
   })
-})
+}
 
 test('PATCH /events/:slug valida rol, campos, estado previo y existencia', async () => {
   await withApi(async () => assert.fail('El rol inválido no debe consultar la base'), async (url) => {
@@ -111,10 +116,10 @@ test('PATCH /events/:slug valida rol, campos, estado previo y existencia', async
     assert.equal(missing.status, 404)
   })
 
-  await withApi(async () => ({ rows: [{ ...event, status: 'pending' }] }), async (url) => {
+  await withApi(async () => ({ rows: [{ ...event, status: 'cancelled' }] }), async (url) => {
     const wrongStatus = await request(url, '/events/evento-prueba', { method: 'PATCH', body: event, headers: auth() })
     assert.equal(wrongStatus.status, 400)
-    assert.equal(wrongStatus.body.message, 'Solo se pueden modificar eventos con cambios solicitados')
+    assert.equal(wrongStatus.body.message, 'El estado actual del evento no permite modificarlo')
   })
 })
 

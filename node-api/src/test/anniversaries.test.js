@@ -15,19 +15,23 @@ const anniversary = {
 
 test('GET /anniversaries lista efemerides visibles y admite filtro de estado', async () => {
   await withApi(async (sql, values) => {
-    assert.match(sql, /FROM anniversaries WHERE status = \$1/)
-    assert.deepEqual(values, ['published'])
-    return { rows: [anniversary] }
+    assert.match(sql, /FROM anniversaries WHERE status = ANY\(\$1::text\[\]\) AND status = \$2/)
+    assert.deepEqual(values, [['published'], 'published'])
+    return { rows: [{ ...anniversary, status: 'published' }] }
   }, async (url) => {
     const result = await request(url, '/anniversaries?status=published')
     assert.equal(result.status, 200)
-    assert.deepEqual(result.body, [anniversary])
+    assert.deepEqual(result.body, [{ ...anniversary, status: 'published' }])
   })
 })
 
 test('GET /anniversaries/:id obtiene por id y responde 404 si no existe', async () => {
-  await withApi(async () => ({ rows: [anniversary] }), async (url) => {
-    const result = await request(url, '/anniversaries/7')
+  await withApi(async (sql, values) => {
+    assert.match(sql, /WHERE id = \$1 AND \(status = ANY/)
+    assert.deepEqual(values, ['7', ['published'], organizer.email])
+    return { rows: [anniversary] }
+  }, async (url) => {
+    const result = await request(url, '/anniversaries/7', { headers: auth() })
     assert.equal(result.status, 200)
     assert.deepEqual(result.body, anniversary)
   })

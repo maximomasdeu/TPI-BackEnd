@@ -93,13 +93,6 @@ def register(request):
     if User.objects.filter(email=email).exists():
         return cors_headers(JsonResponse({'message': 'Ya existe una cuenta con ese email'}, status=409))
 
-    user = User.objects.create_user(
-        username=email,
-        email=email,
-        password=password,
-        first_name=name,
-    )
-
     # Acepta varias organizaciones; si no se envía la lista, admite el campo singular.
     raw_organizations = data.get('organizations')
     if isinstance(raw_organizations, list):
@@ -116,8 +109,14 @@ def register(request):
     if not organizations:
         return cors_headers(JsonResponse({'message': 'Debés indicar al menos una organización'}, status=400))
 
-    # Agrupa las escrituras del perfil y sus organizaciones en una transacción.
+    # Guarda la cuenta, su perfil y sus organizaciones en la misma transacción.
     with transaction.atomic():
+        user = User.objects.create_user(
+            username=email,
+            email=email,
+            password=password,
+            first_name=name,
+        )
         user.profile.name = name
         user.profile.phone = str(data.get('phone', '')).strip()
         user.profile.organization = organizations[0]
@@ -161,15 +160,9 @@ def profile(request):
     if request.method == 'OPTIONS':
         return cors_headers(JsonResponse({}, status=204))
 
-    authorization = request.headers.get('Authorization', '')
-    if not authorization.startswith('Bearer '):
-        return cors_headers(JsonResponse({'message': 'Se requiere iniciar sesión'}, status=401))
-
-    try:
-        payload = jwt.decode(authorization[7:], os.getenv('JWT_SECRET', ''), algorithms=['HS256'])
-        user = User.objects.select_related('profile').get(id=payload['sub'])
-    except Exception:
-        return cors_headers(JsonResponse({'message': 'Sesión inválida'}, status=401))
+    user, error = authenticated_user(request)
+    if error:
+        return error
 
     return cors_headers(JsonResponse(profile_data(user)))
 

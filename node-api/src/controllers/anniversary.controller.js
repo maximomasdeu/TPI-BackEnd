@@ -1,5 +1,8 @@
 import { pool } from '../config/db.js'
 import { deleteStoredImage, processAndStoreEventImage } from '../services/event-image.service.js'
+import { proposalVisibility } from './proposal-visibility.js'
+
+const publicStatuses = ['published']
 
 // Lista efemérides por fecha y aplica filtros de estado y permisos de administración.
 export async function listAnniversaries(request, response, next) {
@@ -11,15 +14,12 @@ export async function listAnniversaries(request, response, next) {
       return
     }
 
+    const values = []
+    const visibility = proposalVisibility(request.user, publicStatuses, values, includeDeleted)
+    const statusFilter = typeof requestedStatus === 'string' && requestedStatus ? ` AND status = $${values.push(requestedStatus)}` : ''
     const result = await pool.query(
-      includeDeleted
-        ? requestedStatus
-          ? 'SELECT * FROM anniversaries WHERE status = $1 ORDER BY month, day, submitted_at'
-          : 'SELECT * FROM anniversaries ORDER BY month, day, submitted_at'
-        : requestedStatus && !['deleted', 'cancelled'].includes(requestedStatus)
-          ? 'SELECT * FROM anniversaries WHERE status = $1 ORDER BY month, day, submitted_at'
-          : "SELECT * FROM anniversaries WHERE status NOT IN ('deleted', 'cancelled') ORDER BY month, day, submitted_at",
-      includeDeleted && requestedStatus ? [requestedStatus] : (!includeDeleted && requestedStatus && !['deleted', 'cancelled'].includes(requestedStatus) ? [requestedStatus] : [])
+      `SELECT * FROM anniversaries WHERE ${visibility}${statusFilter} ORDER BY month, day, submitted_at`,
+      values
     )
     response.json(result.rows)
   } catch (error) {
@@ -30,11 +30,11 @@ export async function listAnniversaries(request, response, next) {
 // Busca una efeméride por ID, ocultando las eliminadas al público.
 export async function getAnniversary(request, response, next) {
   try {
+    const values = [request.params.id]
+    const visibility = proposalVisibility(request.user, publicStatuses, values, true)
     const result = await pool.query(
-      request.user?.role === 'admin'
-        ? 'SELECT * FROM anniversaries WHERE id = $1'
-        : "SELECT * FROM anniversaries WHERE id = $1 AND status NOT IN ('deleted', 'cancelled')",
-      [request.params.id]
+      `SELECT * FROM anniversaries WHERE id = $1 AND ${visibility}`,
+      values
     )
     if (!result.rows.length) {
       response.status(404).json({ message: 'Efeméride no encontrada' })

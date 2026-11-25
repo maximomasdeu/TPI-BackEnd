@@ -1,5 +1,8 @@
 import { pool } from '../config/db.js'
 import { deleteStoredImage, processAndStoreEventImage } from '../services/event-image.service.js'
+import { proposalVisibility } from './proposal-visibility.js'
+
+const publicStatuses = ['published', 'suspended', 'rescheduled', 'past']
 
 // Responde al chequeo de disponibilidad sin consultar la base de datos.
 export function healthCheck(request, response) {
@@ -16,15 +19,12 @@ export async function listEvents(request, response, next) {
       return
     }
 
+    const values = []
+    const visibility = proposalVisibility(request.user, publicStatuses, values, includeDeleted)
+    const statusFilter = typeof requestedStatus === 'string' && requestedStatus ? ` AND status = $${values.push(requestedStatus)}` : ''
     const result = await pool.query(
-      includeDeleted
-        ? requestedStatus
-          ? 'SELECT * FROM events WHERE status = $1 ORDER BY start_at'
-          : 'SELECT * FROM events ORDER BY start_at'
-        : requestedStatus && !['deleted', 'cancelled'].includes(requestedStatus)
-        ? 'SELECT * FROM events WHERE status = $1 ORDER BY start_at'
-        : "SELECT * FROM events WHERE status NOT IN ('deleted', 'cancelled') ORDER BY start_at",
-      includeDeleted && requestedStatus ? [requestedStatus] : (!includeDeleted && requestedStatus && !['deleted', 'cancelled'].includes(requestedStatus) ? [requestedStatus] : [])
+      `SELECT * FROM events WHERE ${visibility}${statusFilter} ORDER BY start_at`,
+      values
     )
     response.json(result.rows)
   } catch (error) {
@@ -35,11 +35,11 @@ export async function listEvents(request, response, next) {
 // Busca un evento por slug; los eliminados o cancelados solo son visibles para admin.
 export async function getEvent(request, response, next) {
   try {
+    const values = [request.params.slug]
+    const visibility = proposalVisibility(request.user, publicStatuses, values, true)
     const result = await pool.query(
-      request.user?.role === 'admin'
-        ? 'SELECT * FROM events WHERE slug = $1'
-        : "SELECT * FROM events WHERE slug = $1 AND status NOT IN ('deleted', 'cancelled')",
-      [request.params.slug]
+      `SELECT * FROM events WHERE slug = $1 AND ${visibility}`,
+      values
     )
     if (!result.rows.length) {
       response.status(404).json({ message: 'Evento no encontrado' })
@@ -122,8 +122,9 @@ export async function updateEventDetails(request, response, next) {
       response.status(404).json({ message: 'Evento no encontrado o sin permiso' })
       return
     }
-    if (current.rows[0].status !== 'changes_requested') {
-      response.status(400).json({ message: 'Solo se pueden modificar eventos con cambios solicitados' })
+    const currentStatus = current.rows[0].status
+    if (!['pending', 'changes_requested', 'published', 'rescheduled'].includes(currentStatus)) {
+      response.status(400).json({ message: 'El estado actual del evento no permite modificarlo' })
       return
     }
 
@@ -147,7 +148,7 @@ export async function updateEventDetails(request, response, next) {
            ticket_url = $12,
            status = 'pending',
            review_note = ''
-       WHERE slug = $13 AND organizer_email = $14
+       WHERE slug = $13 AND organizer_email = $14 AND status = $15
        RETURNING *`,
       [
         body.title,
@@ -164,8 +165,14 @@ export async function updateEventDetails(request, response, next) {
         body.ticket_url || null,
         request.params.slug,
         request.user.email,
+        currentStatus,
       ]
     )
+    if (!result.rows.length) {
+      if (storedImage?.path) await deleteStoredImage(storedImage.path).catch(() => {})
+      response.status(409).json({ message: 'El estado del evento cambió. Volvé al panel y recargá antes de editarlo.' })
+      return
+    }
     response.json(result.rows[0])
   } catch (error) {
     if (storedImage?.path) await deleteStoredImage(storedImage.path).catch(() => {})
