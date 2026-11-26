@@ -32,7 +32,7 @@ export async function listEvents(request, response, next) {
   }
 }
 
-// Busca un evento por slug; los eliminados o cancelados solo son visibles para admin.
+// Busca por slug aplicando la visibilidad pública, del organizador y de administración.
 export async function getEvent(request, response, next) {
   try {
     const values = [request.params.slug]

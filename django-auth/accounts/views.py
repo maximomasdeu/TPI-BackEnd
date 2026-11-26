@@ -111,6 +111,7 @@ def register(request):
 
     # Guarda la cuenta, su perfil y sus organizaciones en la misma transacción.
     with transaction.atomic():
+        # Se hashea la contraseña automáticamente al crear el usuario con create_user.
         user = User.objects.create_user(
             username=email,
             email=email,

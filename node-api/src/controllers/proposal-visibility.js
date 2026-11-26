@@ -8,5 +8,5 @@ export function proposalVisibility(user, publicStatuses, values, includeDeleted 
   if (user?.role !== 'organizer' || !user.email) return publicCondition
 
   const emailIndex = values.push(user.email)
-  return `(${publicCondition} OR (organizer_email = $${emailIndex} AND status NOT IN ('deleted', 'cancelled')))`
+  return `(${publicCondition} OR organizer_email = $${emailIndex})`
 }

@@ -25,6 +25,26 @@ test('GET /anniversaries lista efemerides visibles y admite filtro de estado', a
   })
 })
 
+test('GET /anniversaries incluye efemérides propias rechazadas y dadas de baja', async () => {
+  const moderatedAnniversaries = ['rejected', 'deleted'].map((status, index) => ({
+    ...anniversary,
+    id: anniversary.id + index,
+    organizer_email: organizer.email,
+    status,
+    review_note: 'Motivo de moderación',
+  }))
+
+  await withApi(async (sql, values) => {
+    assert.match(sql, /WHERE \(status = ANY\(\$1::text\[\]\) OR organizer_email = \$2\) ORDER BY/)
+    assert.deepEqual(values, [['published'], organizer.email])
+    return { rows: moderatedAnniversaries }
+  }, async (url) => {
+    const result = await request(url, '/anniversaries', { headers: auth() })
+    assert.equal(result.status, 200)
+    assert.deepEqual(result.body, moderatedAnniversaries)
+  })
+})
+
 test('GET /anniversaries/:id obtiene por id y responde 404 si no existe', async () => {
   await withApi(async (sql, values) => {
     assert.match(sql, /WHERE id = \$1 AND \(status = ANY/)

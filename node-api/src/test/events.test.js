@@ -28,6 +28,26 @@ test('GET /events lista eventos visibles y admite filtro de estado', async () =>
   })
 })
 
+test('GET /events incluye eventos propios rechazados, cancelados y dados de baja', async () => {
+  const moderatedEvents = ['rejected', 'cancelled', 'deleted'].map((status) => ({
+    ...event,
+    slug: `evento-${status}`,
+    organizer_email: organizer.email,
+    status,
+    review_note: 'Motivo de moderación',
+  }))
+
+  await withApi(async (sql, values) => {
+    assert.match(sql, /WHERE \(status = ANY\(\$1::text\[\]\) OR organizer_email = \$2\) ORDER BY/)
+    assert.deepEqual(values, [['published', 'suspended', 'rescheduled', 'past'], organizer.email])
+    return { rows: moderatedEvents }
+  }, async (url) => {
+    const result = await request(url, '/events', { headers: auth() })
+    assert.equal(result.status, 200)
+    assert.deepEqual(result.body, moderatedEvents)
+  })
+})
+
 test('GET /events/:slug obtiene por slug y responde 404 si no existe', async () => {
   await withApi(async (sql, values) => {
     assert.match(sql, /WHERE slug = \$1/)

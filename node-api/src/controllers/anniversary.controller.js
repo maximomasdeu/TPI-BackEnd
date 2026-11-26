@@ -27,7 +27,7 @@ export async function listAnniversaries(request, response, next) {
   }
 }
 
-// Busca una efeméride por ID, ocultando las eliminadas al público.
+// Busca por ID aplicando la visibilidad pública, del organizador y de administración.
 export async function getAnniversary(request, response, next) {
   try {
     const values = [request.params.id]
