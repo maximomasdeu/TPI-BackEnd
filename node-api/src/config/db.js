@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import pg from 'pg'
+import { initializeEventAlerts } from './event-alerts.js'
 
 const { Pool } = pg
 
@@ -83,4 +84,5 @@ export async function initializeDatabase() {
       submitted_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
     )
   `)
+  await initializeEventAlerts(pool)
 }
